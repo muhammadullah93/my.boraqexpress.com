@@ -1,61 +1,126 @@
 # SellFlow Commerce OS
 
-A responsive, zero-build static demo for multi-channel ecommerce operations. It includes dashboard, orders, products, inventory, barcode packing, PackProof evidence, shipping, analytics, stores, and settings screens.
+SellFlow is a role-based ecommerce operations MVP for Boraq Express. It replaces
+the original static dashboard demo with a real Node.js application, MySQL
+storage, server-enforced permissions, inventory reservations, order workflows,
+barcode packing and PackProof records.
 
-## Important
+## What this release operates
 
-This repository is a front-end demo. Marketplace APIs, live authentication, database storage, label printing, and PackProof recording are not connected yet.
+- Secure login for Admin, Supplier and Dropshipper accounts
+- Admin account creation, disable/enable and password reset
+- Product catalogue with supplier price-review workflow
+- Dropshipper-safe catalogue output: supplier identity and cost are removed by
+  the server
+- Supplier-safe order output: dropshipper identity and commercial order value
+  are removed by the server
+- Order creation, one-supplier fulfillment split, stock reservation and guarded
+  status transitions
+- Inventory adjustments and an immutable movement ledger
+- Barcode/order/AWB packing sessions
+- PackProof metadata, optional HTTPS evidence URL and 30-day retention date
+- PackProof completion enforced before an order enters `to_ship`
+- Marketplace adapter status and synchronization audit log
+- Responsive, role-aware single-page interface served by the same Node process
 
-## Run locally
+## Honest integration boundary
 
-No installation or build step is required.
+There is currently no approved Shopee, TikTok Shop or Lazada API access. The
+integration adapters therefore fail safely with a clear message and record the
+attempt in `sync_logs`. The application does not present sample marketplace
+data as live synchronization.
 
-1. Download or clone the repository.
-2. Open `index.html` in Chrome, Edge, Firefox, or Safari.
+Credentials alone are not enough: each production connector still requires an
+approved seller application, callback URLs and platform-specific activation.
 
-For a local HTTP server, use any static server, for example VS Code Live Server.
+## Technology
 
-## Deploy to Hostinger from GitHub
+- Node.js 20+
+- Express 5
+- MySQL 8 / Hostinger managed MySQL
+- Browser-native HTML, CSS and JavaScript (no frontend build step)
+- Node `scrypt` password hashing and HMAC-signed sessions
 
-1. Create a new GitHub repository.
-2. Upload all files from this folder to the repository root. `index.html` must remain at the root.
-3. In hPanel, open **Websites → Dashboard → Advanced → Git**.
-4. Choose **Continue with GitHub**, authorize GitHub, select the repository and branch, then deploy.
-5. Use the repository root as the deployment folder. There is no build command and no output directory.
+## Local setup
 
-Because this is a static project, Hostinger should serve `index.html` directly. Do not deploy over an existing production site's `public_html` unless you have a backup or are intentionally replacing it.
+1. Create an empty MySQL database and a database user with permission to create
+   tables and read/write rows.
+2. Copy `.env.example` to `.env` and enter the database, session and initial
+   administrator values. Node does not load `.env` automatically, so export the
+   values in your shell or use your preferred local environment loader.
+3. Install dependencies and start the app:
 
-## Deploy to GitHub Pages
+   ```bash
+   npm install
+   npm start
+   ```
 
-The included workflow automatically publishes the repository to GitHub Pages.
+4. Open `http://localhost:3000`.
 
-1. Open the repository's **Settings → Pages**.
-2. Under **Build and deployment**, select **GitHub Actions**.
-3. Push to the `main` branch or run the workflow manually.
+On the first successful boot only, `ADMIN_EMAIL` and `ADMIN_PASSWORD` create the
+initial administrator if the `users` table is empty. Use that account to create
+Supplier and Dropshipper accounts from **People & roles**.
+
+## Commands
+
+| Command | Purpose |
+| --- | --- |
+| `npm start` | Start the production server |
+| `npm run dev` | Start with Node watch mode |
+| `npm run check` | Parse-check all server, client and test JavaScript |
+| `npm test` | Run authentication and role-isolation tests |
+
+## Main API areas
+
+All data endpoints require authentication. All authenticated writes also
+require the CSRF header issued at login.
+
+| Area | Endpoints |
+| --- | --- |
+| Authentication | `/api/auth/login`, `/api/auth/me`, `/api/auth/logout` |
+| Dashboard | `/api/dashboard` |
+| Accounts | `/api/users` |
+| Catalogue | `/api/products` |
+| Inventory | `/api/inventory`, `/api/inventory/adjustments` |
+| Orders | `/api/orders`, `/api/orders/:id/status` |
+| PackProof | `/api/packing`, `/api/packing/scan`, `/api/packing/:id/complete` |
+| Marketplaces | `/api/integrations`, `/api/integrations/:platform/sync` |
+| Health | `/api/health` |
 
 ## Repository structure
 
 ```text
-sellflow-commerce-os/
-├── .github/workflows/pages.yml
-├── assets/favicon.svg
-├── .gitignore
-├── .htaccess
-├── index.html
-├── robots.txt
-├── site.webmanifest
+.
+├── db/schema.sql
+├── .github/workflows/ci.yml
+├── public/
+│   ├── app.js
+│   ├── index.html
+│   └── styles.css
+├── src/
+│   ├── routes/
+│   └── services/
+├── test/
+├── .env.example
+├── ARCHITECTURE.md
 ├── DEPLOYMENT.md
-└── README.md
+├── package.json
+└── server.js
 ```
 
-## Next production phase
+## Deliberate first-release limits
 
-- Approved Shopee, TikTok Shop, and Lazada API integrations
-- Secure user authentication and role permissions
-- Persistent database and audit logs
-- Server-side order, inventory, and label processing
-- Live PackProof video storage and retention controls
+- PackProof stores the record and optional evidence URL, not uploaded video
+  binary. Durable object storage and signed upload URLs belong in the next
+  production phase.
+- One order may contain products from only one supplier. A multi-supplier basket
+  must be split into separate fulfillment orders.
+- Marketplace connectors remain inactive until official API approval.
+- Label generation, courier booking, returns and accounting are not included.
 
-## License and branding
+See [DEPLOYMENT.md](DEPLOYMENT.md) for the Hostinger Node.js deployment steps.
 
-The project is an original demo named SellFlow Commerce OS. It does not include BigSeller branding, proprietary code, or copied visual assets.
+## Branding
+
+SellFlow is an original interface. It does not copy BigSeller source code,
+branding or proprietary assets.

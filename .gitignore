@@ -3,7 +3,11 @@ Thumbs.db
 .vscode/
 .idea/
 *.log
+.npm/
+.cache/
+.coverage/
 .env
 .env.*
+!.env.example
 node_modules/
 dist/
