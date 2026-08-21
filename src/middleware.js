@@ -91,6 +91,15 @@ export function errorHandler(error, _req, res, _next) {
   if (error?.code === 'ER_DUP_ENTRY') {
     return res.status(409).json({ error: { code: 'DUPLICATE', message: 'A record with that unique value already exists.' } });
   }
+  if (error?.code === 'ER_LOCK_WAIT_TIMEOUT' || error?.code === 'ER_LOCK_DEADLOCK') {
+    console.error(error);
+    return res.status(503).json({
+      error: {
+        code: 'DATABASE_BUSY',
+        message: 'The database is busy processing another inventory change. Please retry.'
+      }
+    });
+  }
   const status = Number(error.status) || 500;
   if (status >= 500) console.error(error);
   res.status(status).json({
