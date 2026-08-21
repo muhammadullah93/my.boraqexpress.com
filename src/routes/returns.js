@@ -132,9 +132,11 @@ returnsRouter.patch('/:id', requireRoles('admin'), async (req, res) => {
     }
     await connection.execute(
       `UPDATE \`returns\` SET status = ?, resolution = ?, refund_amount = ?, reviewed_by = ?,
-       resolved_at = CASE WHEN ? IN ('rejected','restocked','refunded','closed') THEN UTC_TIMESTAMP() ELSE resolved_at END
+       resolved_at = CASE WHEN ? = 1 THEN UTC_TIMESTAMP() ELSE resolved_at END
        WHERE id = ?`,
-      [status, resolution, refundAmount, req.user.id, status, record.id]
+      [status, resolution, refundAmount, req.user.id,
+        ['rejected', 'restocked', 'refunded', 'closed'].includes(status) ? 1 : 0,
+        record.id]
     );
     return { from: record.status, to: status, refundAmount };
   });
