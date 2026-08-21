@@ -126,6 +126,10 @@ async function datedFolder(now = new Date()) {
   const cacheKey = parts.join('/');
   if (folderCache.has(cacheKey)) return folderCache.get(cacheKey);
   let parentId = config.packProof.drive.folderId;
+  if (!parentId) {
+    parentId = folderCache.get('PackProof') || await findFolder('root', 'PackProof') || await createFolder('root', 'PackProof');
+    folderCache.set('PackProof', parentId);
+  }
   for (const name of parts) {
     parentId = await findFolder(parentId, name) || await createFolder(parentId, name);
   }

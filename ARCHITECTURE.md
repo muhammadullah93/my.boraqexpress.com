@@ -54,9 +54,10 @@ application never pretends demo data is a live marketplace sync.
 
 The application stores barcode scans, packing sessions, timestamps, operator
 identity and evidence metadata in MySQL. Video bytes are uploaded in resumable
-chunks to a private Google Drive date hierarchy (`YYYY/MM/DD`). The Drive file
+chunks to a private Google Drive date hierarchy (`PackProof/YYYY/MM/DD`). The Drive file
 ID is never exposed as a public share link: authorized users stream evidence
 through the role-scoped API. A six-hour retention worker deletes Drive files
 after the configured period (30 days by default) while preserving the text
 audit record. Google Drive is behind a service module so higher-volume object
-storage can replace it without changing the packing workflow.
+storage can replace it without changing the packing workflow. The OAuth scope
+is limited to `drive.file`, so SellFlow cannot inspect unrelated Drive content.

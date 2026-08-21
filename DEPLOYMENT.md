@@ -90,14 +90,18 @@ Drive. Do not create a public share link and never put these values in GitHub.
 GOOGLE_DRIVE_CLIENT_ID=<OAuth client ID>
 GOOGLE_DRIVE_CLIENT_SECRET=<OAuth client secret>
 GOOGLE_DRIVE_REFRESH_TOKEN=<offline refresh token>
-GOOGLE_DRIVE_FOLDER_ID=<private PackProof base folder ID>
+# Optional; leave blank to create PackProof/YYYY/MM/DD automatically
+GOOGLE_DRIVE_FOLDER_ID=
 PACKPROOF_RETENTION_DAYS=30
 PACKPROOF_MAX_FILE_BYTES=262144000
 ```
 
-The app refuses a partial Drive configuration. When none of these four Drive
-credentials is supplied, the rest of SellFlow remains available and PackProof
-shows that direct upload is awaiting authorization.
+Use the minimum `https://www.googleapis.com/auth/drive.file` OAuth scope. This
+lets SellFlow manage files and folders it creates without granting access to
+unrelated Drive content. The app refuses a partial three-value credential
+configuration. `GOOGLE_DRIVE_FOLDER_ID` is optional. When no Drive credentials
+are supplied, the rest of SellFlow remains available and PackProof shows that
+direct upload is awaiting authorization.
 
 ## 5. First boot
 

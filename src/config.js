@@ -75,14 +75,16 @@ export function validateRuntimeConfig() {
   if (config.admin.password && config.admin.password.length < 12) {
     throw new Error('ADMIN_PASSWORD must contain at least 12 characters.');
   }
-  const driveValues = Object.values(config.packProof.drive);
-  if (driveValues.some(Boolean) && !driveValues.every(Boolean)) {
-    throw new Error('Google Drive PackProof storage is partially configured. Set all GOOGLE_DRIVE_* variables or none of them.');
+  const { clientId, clientSecret, refreshToken } = config.packProof.drive;
+  const driveCredentials = [clientId, clientSecret, refreshToken];
+  if (driveCredentials.some(Boolean) && !driveCredentials.every(Boolean)) {
+    throw new Error('Google Drive PackProof storage is partially configured. Set GOOGLE_DRIVE_CLIENT_ID, GOOGLE_DRIVE_CLIENT_SECRET and GOOGLE_DRIVE_REFRESH_TOKEN together.');
   }
 }
 
 export function driveStorageConfigured() {
-  return Object.values(config.packProof.drive).every(Boolean);
+  const { clientId, clientSecret, refreshToken } = config.packProof.drive;
+  return [clientId, clientSecret, refreshToken].every(Boolean);
 }
 
 export function integrationConfigured(platform) {
