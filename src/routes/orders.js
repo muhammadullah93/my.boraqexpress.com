@@ -186,9 +186,9 @@ ordersRouter.patch('/:id/status', async (req, res) => {
     if (['shipped', 'delivered'].includes(nextStatus)) {
       await connection.execute(
         `UPDATE shipments SET status = ?, shipped_at = COALESCE(shipped_at, UTC_TIMESTAMP()),
-             delivered_at = CASE WHEN ? = 'delivered' THEN COALESCE(delivered_at, UTC_TIMESTAMP()) ELSE delivered_at END
+             delivered_at = CASE WHEN ? = 1 THEN COALESCE(delivered_at, UTC_TIMESTAMP()) ELSE delivered_at END
          WHERE order_id = ?`,
-        [nextStatus, nextStatus, order.id]
+        [nextStatus, nextStatus === 'delivered' ? 1 : 0, order.id]
       );
     }
     return { from: order.fulfillment_status, to: nextStatus, trackingNo: tracking, settlement };
