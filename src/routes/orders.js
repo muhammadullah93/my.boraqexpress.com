@@ -3,6 +3,7 @@ import { Router } from 'express';
 import { orderForRole, orderItemForRole, orderScope } from '../access.js';
 import { audit, query, transaction } from '../db.js';
 import { requireRoles } from '../middleware.js';
+import { ensureSupplierPending, settleSupplierPayable } from '../services/finance.js';
 import { ApiError, limit, orderNumber, placeholders, text, wholeNumber } from '../utils.js';
 
 export const ordersRouter = Router();
@@ -77,7 +78,7 @@ ordersRouter.post('/', requireRoles('admin', 'dropshipper'), async (req, res) =>
       suppliers.add(product.supplier_user_id || '__platform__');
       const unitPrice = Number(product.platform_price);
       amount += unitPrice * item.quantity;
-      return { ...item, product, unitPrice };
+      return { ...item, product, unitPrice, supplierUnitPrice: Number(product.supplier_price) };
     });
     if (suppliers.size > 1) throw new ApiError(409, 'MULTI_SUPPLIER_ORDER', 'The MVP creates one supplier fulfilment order at a time. Split these items by supplier.');
     const supplierOwner = suppliers.values().next().value;
@@ -108,9 +109,9 @@ ordersRouter.post('/', requireRoles('admin', 'dropshipper'), async (req, res) =>
     );
     for (const item of items) {
       await connection.execute(
-        `INSERT INTO order_items (id, order_id, product_id, product_name, sku, quantity, unit_price)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        [randomUUID(), id, item.product.id, item.product.name, item.product.sku, item.quantity, item.unitPrice]
+        `INSERT INTO order_items (id, order_id, product_id, product_name, sku, quantity, unit_price, supplier_unit_price)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [randomUUID(), id, item.product.id, item.product.name, item.product.sku, item.quantity, item.unitPrice, item.supplierUnitPrice]
       );
       await connection.execute('UPDATE products SET reserved = reserved + ? WHERE id = ?', [item.quantity, item.product.id]);
     }
@@ -171,8 +172,19 @@ ordersRouter.patch('/:id/status', async (req, res) => {
       }
     }
     const tracking = req.body?.trackingNo == null ? order.tracking_no : text(req.body.trackingNo, 'Tracking number', { required: false, max: 120 }) || null;
+    let settlement = null;
+    if (nextStatus === 'delivered') settlement = await ensureSupplierPending(connection, order.id, req.user.id);
+    if (nextStatus === 'complete') settlement = await settleSupplierPayable(connection, order.id, req.user.id);
     await connection.execute('UPDATE orders SET fulfillment_status = ?, tracking_no = ? WHERE id = ?', [nextStatus, tracking, order.id]);
-    return { from: order.fulfillment_status, to: nextStatus, trackingNo: tracking };
+    if (['shipped', 'delivered'].includes(nextStatus)) {
+      await connection.execute(
+        `UPDATE shipments SET status = ?, shipped_at = COALESCE(shipped_at, UTC_TIMESTAMP()),
+             delivered_at = CASE WHEN ? = 'delivered' THEN COALESCE(delivered_at, UTC_TIMESTAMP()) ELSE delivered_at END
+         WHERE order_id = ?`,
+        [nextStatus, nextStatus, order.id]
+      );
+    }
+    return { from: order.fulfillment_status, to: nextStatus, trackingNo: tracking, settlement };
   });
   await audit(req.user.id, 'change_order_status', 'order', req.params.id, result);
   res.json({ success: true, ...result });

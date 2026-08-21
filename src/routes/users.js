@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { Router } from 'express';
 import { hashPassword } from '../auth.js';
-import { audit, query } from '../db.js';
+import { audit, query, transaction } from '../db.js';
 import { requireRoles } from '../middleware.js';
 import { ApiError, email, publicUser, text } from '../utils.js';
 
@@ -25,11 +25,19 @@ usersRouter.post('/', async (req, res) => {
     companyName: text(req.body?.companyName, 'Company name', { required: false, max: 190 }) || null,
     passwordHash: await hashPassword(password)
   };
-  await query(
-    `INSERT INTO users (id, name, email, password_hash, role, company_name, status)
-     VALUES (?, ?, ?, ?, ?, ?, 'active')`,
-    [user.id, user.name, user.email, user.passwordHash, user.role, user.companyName]
-  );
+  await transaction(async connection => {
+    await connection.execute(
+      `INSERT INTO users (id, name, email, password_hash, role, company_name, status)
+       VALUES (?, ?, ?, ?, ?, ?, 'active')`,
+      [user.id, user.name, user.email, user.passwordHash, user.role, user.companyName]
+    );
+    if (['supplier', 'dropshipper'].includes(user.role)) {
+      await connection.execute(
+        'INSERT INTO wallet_accounts (id, user_id, currency) VALUES (?, ?, ?)',
+        [randomUUID(), user.id, 'MYR']
+      );
+    }
+  });
   await audit(req.user.id, 'create_user', 'user', user.id, { role: user.role, email: user.email });
   const [created] = await query('SELECT id, name, email, role, company_name, status, created_at FROM users WHERE id = ?', [user.id]);
   res.status(201).json({ user: publicUser(created) });

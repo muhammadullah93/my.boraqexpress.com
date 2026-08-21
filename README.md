@@ -20,6 +20,11 @@ barcode packing and PackProof records.
 - Barcode/order/AWB packing sessions
 - PackProof metadata, optional HTTPS evidence URL and 30-day retention date
 - PackProof completion enforced before an order enters `to_ship`
+- Manual courier booking, tracking and HTTPS label records
+- Role-scoped return requests, Admin review and auditable inventory restocking
+- Supplier/dropshipper wallets, supplier settlement release and payout requests
+- Role-scoped operational reports plus an Admin audit-log interface
+- Self-service password change with immediate session invalidation
 - Marketplace adapter status and synchronization audit log
 - Responsive, role-aware single-page interface served by the same Node process
 
@@ -84,6 +89,10 @@ require the CSRF header issued at login.
 | Inventory | `/api/inventory`, `/api/inventory/adjustments` |
 | Orders | `/api/orders`, `/api/orders/:id/status` |
 | PackProof | `/api/packing`, `/api/packing/scan`, `/api/packing/:id/complete` |
+| Shipping | `/api/shipments` |
+| Returns | `/api/returns`, `/api/returns/:id` |
+| Finance | `/api/finance`, `/api/finance/adjustments`, `/api/finance/payouts` |
+| Reports | `/api/reports/summary`, `/api/reports/audit` |
 | Marketplaces | `/api/integrations`, `/api/integrations/:platform/sync` |
 | Health | `/api/health` |
 
@@ -91,7 +100,9 @@ require the CSRF header issued at login.
 
 ```text
 .
-├── db/schema.sql
+├── db/
+│   ├── schema.sql
+│   └── 002_operations.sql
 ├── .github/workflows/ci.yml
 ├── public/
 │   ├── app.js
@@ -116,7 +127,11 @@ require the CSRF header issued at login.
 - One order may contain products from only one supplier. A multi-supplier basket
   must be split into separate fulfillment orders.
 - Marketplace connectors remain inactive until official API approval.
-- Label generation, courier booking, returns and accounting are not included.
+- Courier-generated labels, automatic courier booking, automatic bank payouts
+  and payment-gateway refunds require approved provider credentials. The manual
+  operational records and wallet ledger are included.
+- Return refund amounts are records for reconciliation; they do not trigger a
+  payment provider automatically.
 
 See [DEPLOYMENT.md](DEPLOYMENT.md) for the Hostinger Node.js deployment steps.
 

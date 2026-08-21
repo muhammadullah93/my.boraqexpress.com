@@ -53,6 +53,11 @@ export function orderNumber() {
   return `SF-${date}-${randomBytes(3).toString('hex').toUpperCase()}`;
 }
 
+export function returnNumber() {
+  const date = new Date().toISOString().slice(2, 10).replaceAll('-', '');
+  return `RT-${date}-${randomBytes(3).toString('hex').toUpperCase()}`;
+}
+
 export function publicUser(row) {
   return {
     id: row.id,

@@ -1,8 +1,8 @@
 {
   "name": "sellflow-commerce-os",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
-  "description": "Role-based ecommerce operations MVP for admin, supplier, and dropshipper workflows.",
+  "description": "Role-based ecommerce operations platform with fulfilment, returns, wallets, reports and PackProof workflows.",
   "type": "module",
   "engines": {
     "node": ">=20"

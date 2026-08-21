@@ -39,15 +39,18 @@ const navItems = {
   products: { label: 'Products', icon: '◫' },
   inventory: { label: 'Inventory', icon: '▥' },
   packing: { label: 'PackProof', icon: '▣' },
+  fulfilment: { label: 'Shipping & returns', icon: '⇄' },
+  finance: { label: 'Wallet & payouts', icon: '¤' },
+  reports: { label: 'Reports & audit', icon: '▧' },
   users: { label: 'People & roles', icon: '♙' },
   integrations: { label: 'Integrations', icon: '◎' },
   settings: { label: 'Settings', icon: '⚙' }
 };
 
 const roleViews = {
-  admin: ['dashboard', 'orders', 'products', 'inventory', 'packing', 'users', 'integrations', 'settings'],
-  supplier: ['dashboard', 'orders', 'products', 'inventory', 'packing', 'settings'],
-  dropshipper: ['dashboard', 'orders', 'products', 'packing', 'settings']
+  admin: ['dashboard', 'orders', 'products', 'inventory', 'packing', 'fulfilment', 'finance', 'reports', 'users', 'integrations', 'settings'],
+  supplier: ['dashboard', 'orders', 'products', 'inventory', 'packing', 'fulfilment', 'finance', 'reports', 'settings'],
+  dropshipper: ['dashboard', 'orders', 'products', 'packing', 'fulfilment', 'finance', 'reports', 'settings']
 };
 
 const state = {
@@ -60,6 +63,10 @@ const state = {
   packingSessions: [],
   activePacking: null,
   integrations: [],
+  shipments: [],
+  returns: [],
+  wallets: [],
+  payouts: [],
   modalHandler: null,
   toastTimer: null
 };
@@ -211,6 +218,9 @@ async function loadView(view) {
     else if (view === 'inventory') await renderInventory();
     else if (view === 'orders') await renderOrders();
     else if (view === 'packing') await renderPacking();
+    else if (view === 'fulfilment') await renderFulfilment();
+    else if (view === 'finance') await renderFinance();
+    else if (view === 'reports') await renderReports();
     else if (view === 'users') await renderUsers();
     else if (view === 'integrations') await renderIntegrations();
     else if (view === 'settings') renderSettings();
@@ -269,10 +279,11 @@ async function renderProducts() {
     headers = '<th>Product</th><th>Platform price</th><th>SRP</th><th>Available</th><th>Status</th>';
     rows = state.products.map(product => `<tr><td><span class="table-primary">${escapeHtml(product.name)}</span><span class="table-secondary">${escapeHtml(product.sku)}</span></td><td>${formatMoney(product.platform_price)}</td><td>${formatMoney(product.srp)}</td><td><span class="stock-number">${Number(product.available).toLocaleString()}</span></td><td>${badge(product.status)}</td></tr>`).join('');
   } else {
-    headers = `<th>Product</th>${state.user.role === 'admin' ? '<th>Supplier</th>' : ''}<th>Supplier price</th><th>Platform price</th><th>Stock</th><th>Available</th><th>Status</th><th>Action</th>`;
-    rows = state.products.map(product => `<tr><td><span class="table-primary">${escapeHtml(product.name)}</span><span class="table-secondary">${escapeHtml(product.sku)}</span></td>${state.user.role === 'admin' ? `<td>${escapeHtml(product.supplier_name || 'Platform-owned')}</td>` : ''}<td>${formatMoney(product.supplier_price)}</td><td>${formatMoney(product.platform_price)}</td><td>${Number(product.stock).toLocaleString()}</td><td><span class="stock-number">${Number(product.available).toLocaleString()}</span></td><td>${badge(product.status)}</td><td><div class="actions">${state.user.role === 'admin' && product.proposed_supplier_price != null ? `<button class="button small primary" data-action="approve-price" data-id="${escapeHtml(product.id)}">Approve ${formatMoney(product.proposed_supplier_price)}</button>` : ''}<button class="button small secondary" data-action="edit-product" data-id="${escapeHtml(product.id)}">Edit</button></div></td></tr>`).join('');
+    const isAdmin = state.user.role === 'admin';
+    headers = `<th>Product</th>${isAdmin ? '<th>Supplier</th>' : ''}<th>Supplier price</th>${isAdmin ? '<th>Platform price</th>' : ''}<th>Stock</th><th>Available</th><th>Status</th><th>Action</th>`;
+    rows = state.products.map(product => `<tr><td><span class="table-primary">${escapeHtml(product.name)}</span><span class="table-secondary">${escapeHtml(product.sku)}</span></td>${isAdmin ? `<td>${escapeHtml(product.supplier_name || 'Platform-owned')}</td>` : ''}<td>${formatMoney(product.supplier_price)}</td>${isAdmin ? `<td>${formatMoney(product.platform_price)}</td>` : ''}<td>${Number(product.stock).toLocaleString()}</td><td><span class="stock-number">${Number(product.available).toLocaleString()}</span></td><td>${badge(product.status)}</td><td><div class="actions">${isAdmin && product.proposed_supplier_price != null ? `<button class="button small primary" data-action="approve-price" data-id="${escapeHtml(product.id)}">Approve ${formatMoney(product.proposed_supplier_price)}</button>` : ''}<button class="button small secondary" data-action="edit-product" data-id="${escapeHtml(product.id)}">Edit</button></div></td></tr>`).join('');
   }
-  const columns = state.user.role === 'dropshipper' ? 5 : state.user.role === 'admin' ? 8 : 7;
+  const columns = state.user.role === 'dropshipper' ? 5 : state.user.role === 'admin' ? 8 : 6;
   elements.page.innerHTML = `
     ${pageHead('Products', state.user.role === 'dropshipper' ? 'Approved catalogue with platform price and recommended selling price.' : 'Manage catalogue, supplier pricing and approval status.', actions)}
     ${state.user.role === 'dropshipper' ? '<div class="notice-card"><span class="notice-icon">✓</span><span><b>Commercial privacy is active</b><small>Supplier identity and supplier cost are not exposed in this account.</small></span></div>' : ''}
@@ -290,7 +301,7 @@ function productForm(product = null) {
     ${isAdmin && !product ? `<label class="field wide"><span>Supplier account</span><select name="supplierUserId"><option value="">Platform-owned / unassigned</option>${suppliers.map(user => `<option value="${escapeHtml(user.id)}">${escapeHtml(user.name)} — ${escapeHtml(user.companyName || user.email)}</option>`).join('')}</select></label>` : ''}
     <label class="field"><span>Supplier price (MYR)</span><input name="supplierPrice" type="number" min="0" step="0.01" required value="${escapeHtml(product?.supplier_price ?? '')}"><small>${state.user.role === 'supplier' ? 'Price increases require admin approval.' : 'Internal supplier cost.'}</small></label>
     ${isAdmin ? `<label class="field"><span>Platform price (MYR)</span><input name="platformPrice" type="number" min="0" step="0.01" value="${escapeHtml(product?.platform_price ?? '')}"></label>` : ''}
-    <label class="field"><span>Recommended selling price</span><input name="srp" type="number" min="0" step="0.01" value="${escapeHtml(product?.srp ?? '')}"><small>Minimum 30% above platform price.</small></label>
+    ${isAdmin ? `<label class="field"><span>Recommended selling price</span><input name="srp" type="number" min="0" step="0.01" value="${escapeHtml(product?.srp ?? '')}"><small>Minimum 30% above platform price.</small></label>` : ''}
     ${product ? '' : '<label class="field"><span>Opening stock</span><input name="stock" type="number" min="0" step="1" required value="0"></label>'}
     ${isAdmin ? `<label class="field"><span>Status</span><select name="status">${['draft', 'active', 'paused', 'pending_review', 'price_review'].map(status => `<option value="${status}"${product?.status === status ? ' selected' : ''}>${titleCase(status)}</option>`).join('')}</select></label>` : ''}
   </div>`;
@@ -489,6 +500,169 @@ async function renderPacking() {
   });
 }
 
+async function renderFulfilment() {
+  const [shipmentData, returnData, orderData] = await Promise.all([api('/shipments'), api('/returns'), api('/orders')]);
+  state.shipments = shipmentData.shipments;
+  state.returns = returnData.returns;
+  state.orders = orderData.orders;
+  const canBook = ['admin', 'supplier'].includes(state.user.role);
+  const canReturn = ['admin', 'dropshipper'].includes(state.user.role);
+  const bookable = state.orders.some(order => ['to_ship', 'shipped', 'delivered'].includes(order.fulfillment_status));
+  const returnable = state.orders.some(order => ['delivered', 'complete'].includes(order.fulfillment_status));
+  const actions = `${canBook && bookable ? '<button class="button primary" data-action="book-shipment">+ Book shipment</button>' : ''}${canReturn && returnable ? '<button class="button secondary" data-action="request-return">Request return</button>' : ''}`;
+  elements.page.innerHTML = `
+    ${pageHead('Shipping & returns', 'Manual courier records now; approved courier APIs can attach to the same workflow later.', actions)}
+    <section class="card table-card"><div class="card-head"><div><h2>Shipments</h2><p>Tracking and label records scoped to your role</p></div></div><div class="table-wrap"><table><thead><tr><th>Order</th><th>Courier</th><th>Tracking</th><th>Status</th><th>Label</th><th>Updated</th></tr></thead><tbody>
+      ${state.shipments.length ? state.shipments.map(item => `<tr><td>${escapeHtml(item.order_no)}</td><td><span class="table-primary">${escapeHtml(item.courier)}</span><span class="table-secondary">${escapeHtml(item.service || 'Standard')}</span></td><td>${escapeHtml(item.tracking_no)}</td><td>${badge(item.status)}</td><td>${item.label_url ? `<a href="${escapeHtml(item.label_url)}" target="_blank" rel="noopener noreferrer">Open label</a>` : '—'}</td><td>${escapeHtml(formatDate(item.updated_at))}</td></tr>`).join('') : emptyRow(6, 'No shipment records yet.')}
+    </tbody></table></div></section>
+    <section class="card table-card dashboard-grid-single"><div class="card-head"><div><h2>Returns</h2><p>Request, review, refund and restock trail</p></div></div><div class="table-wrap"><table><thead><tr><th>Return</th><th>Order</th><th>Reason</th><th>Items</th><th>Status</th><th>Resolution</th><th>Action</th></tr></thead><tbody>
+      ${state.returns.length ? state.returns.map(item => `<tr><td>${escapeHtml(item.return_no)}</td><td><span class="table-primary">${escapeHtml(item.order_no)}</span><span class="table-secondary">${escapeHtml(item.customer_name)}</span></td><td><span class="table-primary">${escapeHtml(item.reason)}</span></td><td>${item.items.reduce((sum, row) => sum + Number(row.quantity), 0)}</td><td>${badge(item.status)}</td><td>${escapeHtml(titleCase(item.resolution))}${Number(item.refund_amount) ? `<span class="table-secondary">${formatMoney(item.refund_amount)}</span>` : ''}</td><td>${state.user.role === 'admin' && !['rejected', 'restocked', 'refunded', 'closed'].includes(item.status) ? `<button class="button small secondary" data-action="manage-return" data-id="${escapeHtml(item.id)}">Review</button>` : '—'}</td></tr>`).join('') : emptyRow(7, 'No return requests yet.')}
+    </tbody></table></div></section>`;
+}
+
+function openShipmentModal() {
+  const orders = state.orders.filter(order => ['to_ship', 'shipped', 'delivered'].includes(order.fulfillment_status));
+  openModal({
+    eyebrow: 'Manual courier', title: 'Book or update shipment', submitLabel: 'Save shipment',
+    html: `<label class="field"><span>Order</span><select name="orderId" required>${orders.map(order => `<option value="${escapeHtml(order.id)}">${escapeHtml(order.order_no)} — ${escapeHtml(order.customer_name)}</option>`).join('')}</select></label><div class="field-grid"><label class="field"><span>Courier</span><input name="courier" required maxlength="100" placeholder="J&T Express"></label><label class="field"><span>Service</span><input name="service" maxlength="100" placeholder="Standard"></label><label class="field wide"><span>Tracking / AWB</span><input name="trackingNo" required maxlength="160"></label><label class="field wide"><span>HTTPS label URL (optional)</span><input name="labelUrl" type="url" maxlength="500"></label></div>`,
+    handler: async form => {
+      const body = Object.fromEntries(new FormData(form));
+      if (!body.service) delete body.service;
+      if (!body.labelUrl) delete body.labelUrl;
+      await api('/shipments', { method: 'POST', body });
+      await renderFulfilment();
+      showToast('Shipment record saved.');
+    }
+  });
+}
+
+function openReturnRequestModal() {
+  const orders = state.orders.filter(order => ['delivered', 'complete'].includes(order.fulfillment_status));
+  const itemFields = order => `<div class="return-items">${(order?.items || []).map(item => `<label class="return-item"><input type="checkbox" data-return-item value="${escapeHtml(item.id)}" checked><span><b>${escapeHtml(item.product_name)}</b><small>${escapeHtml(item.sku)} · Ordered ${Number(item.quantity)}</small></span><input type="number" data-return-qty min="1" max="${Number(item.quantity)}" value="${Number(item.quantity)}" aria-label="Return quantity"></label>`).join('')}</div>`;
+  openModal({
+    eyebrow: 'Returns', title: 'Request a return', submitLabel: 'Submit request',
+    html: `<label class="field"><span>Order</span><select id="returnOrderSelect" name="orderId" required>${orders.map(order => `<option value="${escapeHtml(order.id)}">${escapeHtml(order.order_no)} — ${escapeHtml(order.customer_name)}</option>`).join('')}</select></label><div class="section-label"><b>Return items</b></div><div id="returnItems">${itemFields(orders[0])}</div><label class="field"><span>Reason</span><textarea name="reason" required maxlength="500"></textarea></label><label class="field"><span>Notes (optional)</span><textarea name="notes" maxlength="2000"></textarea></label>`,
+    onOpen: () => {
+      $('#returnOrderSelect').addEventListener('change', event => {
+        $('#returnItems').innerHTML = itemFields(orders.find(order => order.id === event.target.value));
+      });
+    },
+    handler: async form => {
+      const body = Object.fromEntries(new FormData(form));
+      body.items = [...form.querySelectorAll('[data-return-item]:checked')].map(input => ({
+        orderItemId: input.value,
+        quantity: Number(input.closest('.return-item').querySelector('[data-return-qty]').value)
+      }));
+      if (!body.items.length) throw new Error('Select at least one item to return.');
+      if (!body.notes) delete body.notes;
+      await api('/returns', { method: 'POST', body });
+      await renderFulfilment();
+      showToast('Return request created.');
+    }
+  });
+}
+
+function openReturnReviewModal(record) {
+  const transitions = {
+    requested: ['approved', 'rejected'],
+    approved: ['received', 'refunded', 'rejected'],
+    received: ['restocked', 'refunded', 'closed'],
+    restocked: ['refunded', 'closed'],
+    refunded: ['closed']
+  }[record.status] || [];
+  openModal({
+    eyebrow: record.return_no, title: 'Review return', submitLabel: 'Update return',
+    html: `<div class="notice-card"><span class="notice-icon">↩</span><span><b>${escapeHtml(record.reason)}</b><small>${record.items.length} line item(s)</small></span></div><div class="field-grid"><label class="field"><span>Status</span><select name="status">${transitions.map(value => `<option value="${value}">${titleCase(value)}</option>`).join('')}</select></label><label class="field"><span>Resolution</span><select name="resolution"><option value="pending">Pending</option><option value="refund">Refund</option><option value="replacement">Replacement</option><option value="credit">Account credit</option><option value="no_action">No action</option></select></label><label class="field wide"><span>Refund amount</span><input name="refundAmount" type="number" min="0" step="0.01" value="${Number(record.refund_amount || 0)}"></label></div><p class="muted">Choosing Restocked adds returned quantities back to inventory once and records the movement.</p>`,
+    handler: async form => {
+      const body = Object.fromEntries(new FormData(form));
+      body.refundAmount = Number(body.refundAmount || 0);
+      await api(`/returns/${record.id}`, { method: 'PATCH', body });
+      await renderFulfilment();
+      showToast('Return updated.');
+    }
+  });
+}
+
+async function renderFinance() {
+  const data = await api('/finance');
+  state.wallets = data.wallets;
+  state.payouts = data.payouts;
+  const transactions = data.transactions;
+  const own = state.wallets.find(wallet => wallet.user_id === state.user.id) || state.wallets[0];
+  const actions = state.user.role === 'admin'
+    ? '<button class="button primary" data-action="adjust-wallet">+ Adjust wallet</button>'
+    : own && Number(own.available_balance) > 0 ? '<button class="button primary" data-action="request-payout">Request payout</button>' : '';
+  elements.page.innerHTML = `
+    ${pageHead('Wallet & payouts', 'Auditable pending and available balances; external payment APIs remain disconnected.', actions)}
+    <section class="kpi-grid">
+      <article class="card kpi-card"><span class="kpi-label">Wallets</span><strong class="kpi-value">${state.wallets.length}</strong><span class="kpi-note">Role-scoped accounts</span></article>
+      <article class="card kpi-card"><span class="kpi-label">Pending</span><strong class="kpi-value">${formatMoney(state.wallets.reduce((sum, wallet) => sum + Number(wallet.pending_balance), 0))}</strong><span class="kpi-note">Awaiting completion</span></article>
+      <article class="card kpi-card"><span class="kpi-label">Available</span><strong class="kpi-value">${formatMoney(state.wallets.reduce((sum, wallet) => sum + Number(wallet.available_balance), 0))}</strong><span class="kpi-note">Eligible for payout</span></article>
+      <article class="card kpi-card"><span class="kpi-label">Open payouts</span><strong class="kpi-value">${state.payouts.filter(item => item.status === 'requested').length}</strong><span class="kpi-note">Manual processing</span></article>
+    </section>
+    ${state.user.role === 'admin' ? `<section class="card table-card dashboard-grid-single"><div class="card-head"><div><h2>Wallet accounts</h2><p>Supplier and dropshipper balances</p></div></div><div class="table-wrap"><table><thead><tr><th>Account</th><th>Role</th><th>Pending</th><th>Available</th><th>Currency</th></tr></thead><tbody>${state.wallets.map(wallet => `<tr><td><span class="table-primary">${escapeHtml(wallet.name)}</span><span class="table-secondary">${escapeHtml(wallet.company_name || wallet.email)}</span></td><td>${badge(wallet.role)}</td><td>${formatMoney(wallet.pending_balance)}</td><td>${formatMoney(wallet.available_balance)}</td><td>${escapeHtml(wallet.currency)}</td></tr>`).join('') || emptyRow(5, 'No wallets yet.')}</tbody></table></div></section>` : ''}
+    <section class="card table-card dashboard-grid-single"><div class="card-head"><div><h2>Payout requests</h2><p>Funds are held immediately when requested</p></div></div><div class="table-wrap"><table><thead><tr><th>Account</th><th>Amount</th><th>Status</th><th>Reference</th><th>Requested</th><th>Action</th></tr></thead><tbody>${state.payouts.length ? state.payouts.map(item => `<tr><td>${escapeHtml(item.name || state.user.name)}</td><td>${formatMoney(item.amount)}</td><td>${badge(item.status)}</td><td>${escapeHtml(item.payment_reference || '—')}</td><td>${escapeHtml(formatDate(item.requested_at))}</td><td>${state.user.role === 'admin' && item.status === 'requested' ? `<button class="button small secondary" data-action="process-payout" data-id="${escapeHtml(item.id)}">Process</button>` : '—'}</td></tr>`).join('') : emptyRow(6, 'No payout requests.')}</tbody></table></div></section>
+    <section class="card table-card dashboard-grid-single"><div class="card-head"><div><h2>Wallet ledger</h2><p>Immutable newest-first transaction history</p></div></div><div class="table-wrap"><table><thead><tr><th>Type</th><th>Bucket</th><th>Amount</th><th>Balance</th><th>Description</th><th>Time</th></tr></thead><tbody>${transactions.length ? transactions.map(item => `<tr><td>${badge(item.type)}</td><td>${escapeHtml(titleCase(item.bucket))}</td><td class="${Number(item.amount) >= 0 ? 'positive' : 'negative'}">${Number(item.amount) > 0 ? '+' : ''}${formatMoney(item.amount)}</td><td>${formatMoney(item.balance_after)}</td><td>${escapeHtml(item.description || '—')}</td><td>${escapeHtml(formatDate(item.created_at))}</td></tr>`).join('') : emptyRow(6, 'No wallet transactions.')}</tbody></table></div></section>`;
+}
+
+function openWalletAdjustmentModal() {
+  openModal({
+    eyebrow: 'Finance control', title: 'Adjust a wallet', submitLabel: 'Record adjustment',
+    html: `<label class="field"><span>Account</span><select name="userId" required>${state.wallets.map(wallet => `<option value="${escapeHtml(wallet.user_id)}">${escapeHtml(wallet.name)} — ${titleCase(wallet.role)}</option>`).join('')}</select></label><div class="field-grid"><label class="field"><span>Bucket</span><select name="bucket"><option value="available">Available</option><option value="pending">Pending</option></select></label><label class="field"><span>Amount</span><input name="amount" type="number" step="0.01" required><small>Use a negative value to deduct.</small></label><label class="field wide"><span>Description</span><input name="description" required maxlength="255"></label></div>`,
+    handler: async form => {
+      const body = Object.fromEntries(new FormData(form));
+      body.amount = Number(body.amount);
+      await api('/finance/adjustments', { method: 'POST', body });
+      await renderFinance();
+      showToast('Wallet adjustment recorded.');
+    }
+  });
+}
+
+function openPayoutRequestModal() {
+  const wallet = state.wallets.find(item => item.user_id === state.user.id) || state.wallets[0];
+  openModal({
+    eyebrow: 'Payout', title: 'Request withdrawal', submitLabel: 'Request payout',
+    html: `<div class="notice-card"><span class="notice-icon">¤</span><span><b>${formatMoney(wallet?.available_balance || 0)} available</b><small>Funds are held while Admin processes the request.</small></span></div><label class="field"><span>Amount</span><input name="amount" type="number" min="0.01" max="${Number(wallet?.available_balance || 0)}" step="0.01" required></label>`,
+    handler: async form => {
+      await api('/finance/payouts', { method: 'POST', body: { amount: Number(new FormData(form).get('amount')) } });
+      await renderFinance();
+      showToast('Payout requested.');
+    }
+  });
+}
+
+function openPayoutProcessModal(payout) {
+  openModal({
+    eyebrow: 'Payout control', title: `Process ${formatMoney(payout.amount)}`, submitLabel: 'Save decision',
+    html: `<label class="field"><span>Decision</span><select name="status"><option value="paid">Paid</option><option value="rejected">Rejected and return funds</option></select></label><label class="field"><span>Payment reference (optional)</span><input name="paymentReference" maxlength="160"></label>`,
+    handler: async form => {
+      const body = Object.fromEntries(new FormData(form));
+      if (!body.paymentReference) delete body.paymentReference;
+      await api(`/finance/payouts/${payout.id}`, { method: 'PATCH', body });
+      await renderFinance();
+      showToast('Payout decision recorded.');
+    }
+  });
+}
+
+async function renderReports() {
+  const tasks = [api('/reports/summary')];
+  if (state.user.role === 'admin') tasks.push(api('/reports/audit'));
+  const [summary, auditData] = await Promise.all(tasks);
+  const auditRows = auditData?.logs || [];
+  elements.page.innerHTML = `
+    ${pageHead('Reports & audit', 'Operational totals are role-scoped; Admin also sees the system audit trail.', '<button class="button secondary" data-action="refresh">↻ Refresh</button>')}
+    <section class="kpi-grid">
+      <article class="card kpi-card"><span class="kpi-label">Orders</span><strong class="kpi-value">${Number(summary.orders.total_orders || 0)}</strong><span class="kpi-note">${Number(summary.orders.completed_orders || 0)} completed</span></article>
+      <article class="card kpi-card"><span class="kpi-label">Order value</span><strong class="kpi-value">${summary.orders.order_value == null ? 'Private' : formatMoney(summary.orders.order_value)}</strong><span class="kpi-note">Excludes cancelled</span></article>
+      <article class="card kpi-card"><span class="kpi-label">Shipments</span><strong class="kpi-value">${Number(summary.shipments.total_shipments || 0)}</strong><span class="kpi-note">${Number(summary.shipments.delivered_shipments || 0)} delivered</span></article>
+      <article class="card kpi-card"><span class="kpi-label">Returns</span><strong class="kpi-value">${Number(summary.returns.total_returns || 0)}</strong><span class="kpi-note">${Number(summary.returns.open_returns || 0)} open</span></article>
+    </section>
+    <section class="card table-card dashboard-grid-single"><div class="card-head"><div><h2>Inventory summary</h2><p>Current role-scoped catalogue health</p></div></div><div class="status-list"><div class="status-row"><span>Products</span><div class="status-track"><div class="status-fill" style="width:100%"></div></div><strong>${Number(summary.products.total_products || 0)}</strong></div><div class="status-row"><span>Stock units</span><div class="status-track"><div class="status-fill" style="width:100%"></div></div><strong>${Number(summary.products.stock_units || 0)}</strong></div><div class="status-row"><span>Low stock</span><div class="status-track"><div class="status-fill" style="width:${Number(summary.products.total_products) ? Math.min(100, Number(summary.products.low_stock || 0) / Number(summary.products.total_products) * 100) : 0}%"></div></div><strong>${Number(summary.products.low_stock || 0)}</strong></div></div></section>
+    ${state.user.role === 'admin' ? `<section class="card table-card dashboard-grid-single"><div class="card-head"><div><h2>Audit trail</h2><p>Authentication and operational changes</p></div></div><div class="table-wrap"><table><thead><tr><th>User</th><th>Action</th><th>Entity</th><th>Reference</th><th>Time</th></tr></thead><tbody>${auditRows.length ? auditRows.map(item => `<tr><td><span class="table-primary">${escapeHtml(item.user_name || 'System')}</span><span class="table-secondary">${escapeHtml(item.user_email || '—')}</span></td><td>${badge(item.action)}</td><td>${escapeHtml(titleCase(item.entity_type))}</td><td>${escapeHtml(item.entity_id || '—')}</td><td>${escapeHtml(formatDate(item.created_at))}</td></tr>`).join('') : emptyRow(5, 'No audit events.')}</tbody></table></div></section>` : ''}`;
+}
+
 async function renderUsers() {
   await ensureUsers();
   elements.page.innerHTML = `
@@ -540,11 +714,23 @@ function renderSettings() {
   elements.page.innerHTML = `
     ${pageHead('Settings', 'Account details and first-release operating boundaries.')}
     <section class="settings-grid">
-      <article class="card settings-card"><h2>Your account</h2><p>This profile is loaded from the authenticated server session.</p><div class="rule-list"><div class="rule"><span>●</span><div><b>${escapeHtml(state.user.name)}</b><small>${escapeHtml(state.user.email)}</small></div></div><div class="rule"><span>●</span><div><b>${escapeHtml(titleCase(state.user.role))}</b><small>${escapeHtml(state.user.companyName || 'Boraq Express workspace')}</small></div></div><div class="rule"><span>●</span><div><b>Session security</b><small>HttpOnly signed cookie plus CSRF protection.</small></div></div></div></article>
+      <article class="card settings-card"><h2>Your account</h2><p>This profile is loaded from the authenticated server session.</p><div class="rule-list"><div class="rule"><span>●</span><div><b>${escapeHtml(state.user.name)}</b><small>${escapeHtml(state.user.email)}</small></div></div><div class="rule"><span>●</span><div><b>${escapeHtml(titleCase(state.user.role))}</b><small>${escapeHtml(state.user.companyName || 'Boraq Express workspace')}</small></div></div><div class="rule"><span>●</span><div><b>Session security</b><small>HttpOnly signed cookie plus CSRF protection.</small></div></div><button class="button secondary" data-action="change-password">Change my password</button></div></article>
       <article class="card settings-card"><h2>Role boundary</h2><p>Commercial data is filtered again by the server, not only hidden in the interface.</p><div class="rule-list"><div class="rule"><span>✓</span><div><b>${escapeHtml(commercialRule[0])}</b><small>${escapeHtml(commercialRule[1])}</small></div></div><div class="rule"><span>✓</span><div><b>Scoped records</b><small>Suppliers see assigned fulfillment; dropshippers see only their own orders.</small></div></div><div class="rule"><span>✓</span><div><b>Audit trail</b><small>Login and operational changes are recorded in MySQL.</small></div></div></div></article>
       <article class="card settings-card"><h2>PackProof v1</h2><p>Operational and honest about its current capability.</p><div class="rule-list"><div class="rule"><span>30</span><div><b>30-day retention date</b><small>Stored on every completed packing session.</small></div></div><div class="rule"><span>↗</span><div><b>Secure evidence URL</b><small>Optional pointer to externally stored evidence; no binary video upload yet.</small></div></div></div></article>
       <article class="card settings-card"><h2>Marketplace sync</h2><p>Adapter scaffolding is present, but credentials alone are not treated as approval.</p><div class="rule-list"><div class="rule"><span>!</span><div><b>Approval pending</b><small>Shopee, TikTok Shop and Lazada developer access is still required.</small></div></div>${state.user.role === 'admin' ? '<button class="button secondary" data-action="view-integrations">Open integration status</button>' : ''}</div></article>
     </section>`;
+}
+
+function openChangePasswordModal() {
+  openModal({
+    eyebrow: 'Account security', title: 'Change your password', submitLabel: 'Change password',
+    html: '<label class="field"><span>Current password</span><input name="currentPassword" type="password" maxlength="500" required autocomplete="current-password"></label><label class="field"><span>New password</span><input name="newPassword" type="password" minlength="12" maxlength="500" required autocomplete="new-password"><small>Use at least 12 characters. You will be signed out after the change.</small></label>',
+    handler: async form => {
+      await api('/auth/change-password', { method: 'POST', body: Object.fromEntries(new FormData(form)) });
+      showLogin();
+      showToast('Password changed. Sign in again.');
+    }
+  });
 }
 
 function filterRows(selector, query) {
@@ -653,6 +839,13 @@ elements.page.addEventListener('click', async event => {
       showToast('Supplier price increase approved.');
     }
     else if (action === 'adjust-stock') openInventoryModal();
+    else if (action === 'book-shipment') openShipmentModal();
+    else if (action === 'request-return') openReturnRequestModal();
+    else if (action === 'manage-return') openReturnReviewModal(state.returns.find(item => item.id === button.dataset.id));
+    else if (action === 'adjust-wallet') openWalletAdjustmentModal();
+    else if (action === 'request-payout') openPayoutRequestModal();
+    else if (action === 'process-payout') openPayoutProcessModal(state.payouts.find(item => item.id === button.dataset.id));
+    else if (action === 'change-password') openChangePasswordModal();
     else if (action === 'add-order') openOrderModal();
     else if (action === 'manage-order') openOrderStatusModal(state.orders.find(item => item.id === button.dataset.id));
     else if (action === 'add-user') openUserModal();

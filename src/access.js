@@ -13,6 +13,10 @@ export function orderScope(user, alias = 'o') {
 export function productForRole(product, role) {
   const result = { ...product };
   result.available = Number(result.stock) - Number(result.reserved);
+  if (role === 'supplier') {
+    delete result.platform_price;
+    delete result.srp;
+  }
   if (role === 'dropshipper') {
     delete result.supplier_user_id;
     delete result.supplier_name;
@@ -43,5 +47,6 @@ export function orderForRole(order, role) {
 export function orderItemForRole(item, role) {
   const result = { ...item };
   if (role === 'supplier') delete result.unit_price;
+  if (role === 'dropshipper') delete result.supplier_unit_price;
   return result;
 }

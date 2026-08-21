@@ -5,7 +5,7 @@
 - Node.js 20 or newer
 - Express 5 server
 - Hostinger-managed MySQL
-- Idempotent `001_initial` schema migration tracked in `schema_migrations`
+- Ordered, idempotent schema migrations tracked in `schema_migrations`
 - Same-origin HTML/CSS/JavaScript frontend served by Express
 - Secrets supplied only through Hostinger environment variables
 
@@ -30,7 +30,18 @@
 ## Core entities
 
 `users`, `products`, `orders`, `order_items`, `inventory_movements`,
-`packing_sessions`, `integrations`, `sync_logs`, and `audit_logs`.
+`packing_sessions`, `shipments`, `returns`, `return_items`, `wallet_accounts`,
+`wallet_transactions`, `payout_requests`, `integrations`, `sync_logs`, and
+`audit_logs`.
+
+## Financial integrity
+
+Each new order item snapshots the supplier unit price used for settlement.
+Delivery moves the supplier payable into the pending wallet bucket; completion
+releases it to the available bucket. Payout requests place an immediate hold
+and require an Admin paid/rejected decision. Provider-side bank or gateway
+settlement is deliberately outside the application until approved credentials
+are configured.
 
 ## Marketplace boundary
 

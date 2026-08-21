@@ -28,6 +28,17 @@ test('supplier order output hides dropshipper identity and commercial values', (
   assert.equal('unit_price' in orderItemForRole({ unit_price: '25.00', quantity: 2 }, 'supplier'), false);
 });
 
+test('supplier product output hides platform markup and recommended retail price', () => {
+  const product = productForRole({
+    id: 'product-1', supplier_user_id: 'supplier-1', supplier_price: '20.00',
+    platform_price: '25.00', srp: '35.00', stock: 50, reserved: 7
+  }, 'supplier');
+  assert.equal(product.supplier_price, '20.00');
+  assert.equal(product.available, 43);
+  assert.equal('platform_price' in product, false);
+  assert.equal('srp' in product, false);
+});
+
 test('dropshipper order output hides supplier identity', () => {
   const order = orderForRole({ supplier_user_id: 'supplier-1', supplier_name: 'Secret Supplier', amount: '80.00' }, 'dropshipper');
   assert.equal('supplier_user_id' in order, false);

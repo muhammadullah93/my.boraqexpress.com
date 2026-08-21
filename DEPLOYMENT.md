@@ -83,11 +83,12 @@ LAZADA_APP_SECRET=
 
 ## 5. First boot
 
-At startup the app runs the idempotent `001_initial` migration from
-`db/schema.sql` and records it in `schema_migrations`. If the `users` table is
-empty, the initial admin variables are required and create the first Admin
-account. The server intentionally refuses to start with an empty user table and
-no bootstrap administrator.
+At startup the app runs ordered, idempotent migrations and records each one in
+`schema_migrations`: `001_initial` creates the original operational tables and
+`002_operations` adds price snapshots, shipping, returns, wallets and payouts.
+If the `users` table is empty, the initial admin variables are required and
+create the first Admin account. The server intentionally refuses to start with
+an empty user table and no bootstrap administrator.
 
 After the first successful login:
 
@@ -111,6 +112,15 @@ Do not switch the production domain until all checks pass:
   movement.
 - Barcode/order scan starts packing; completion changes the order to `to_ship`
   and sets a 30-day retention date.
+- Booking a manual shipment stores courier, tracking and optional HTTPS label
+  metadata without pretending that a courier API was called.
+- A Dropshipper return request is role-scoped; Admin can review it and a
+  `restocked` decision creates exactly one positive inventory movement.
+- Delivery credits the supplier pending wallet and order completion releases
+  the snapshotted supplier payable to the available wallet.
+- A payout request holds funds; Admin rejection returns them exactly once.
+- Reports remain role-scoped and only Admin can open the audit trail.
+- Changing a password invalidates the current and other active sessions.
 - Shopee/TikTok/Lazada test sync reports approval/configuration required and
   writes a failed sync log—it must not claim success.
 - Mobile and desktop layouts work over HTTPS.

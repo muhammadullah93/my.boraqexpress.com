@@ -8,6 +8,18 @@ import { hashPassword } from './auth.js';
 
 let pool;
 
+async function prepareMigration(connection, id) {
+  if (id !== '002_operations') return;
+  const [columns] = await connection.execute(
+    `SELECT COLUMN_NAME FROM information_schema.COLUMNS
+      WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'order_items' AND COLUMN_NAME = 'supplier_unit_price'`,
+    [config.db.name]
+  );
+  if (!columns[0]) {
+    await connection.execute('ALTER TABLE order_items ADD COLUMN supplier_unit_price DECIMAL(12,2) NULL AFTER unit_price');
+  }
+}
+
 function connectionOptions(extra = {}) {
   return {
     host: config.db.host,
@@ -24,7 +36,10 @@ function connectionOptions(extra = {}) {
 
 export async function initDb() {
   const currentDir = dirname(fileURLToPath(import.meta.url));
-  const schema = await readFile(join(currentDir, '..', 'db', 'schema.sql'), 'utf8');
+  const migrations = [
+    { id: '001_initial', file: 'schema.sql' },
+    { id: '002_operations', file: '002_operations.sql' }
+  ];
   const bootstrap = await mysql.createConnection(connectionOptions({ multipleStatements: true }));
   try {
     await bootstrap.execute(
@@ -33,10 +48,13 @@ export async function initDb() {
          applied_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`
     );
-    const [applied] = await bootstrap.execute('SELECT id FROM schema_migrations WHERE id = ? LIMIT 1', ['001_initial']);
-    if (!applied[0]) {
-      await bootstrap.query(schema);
-      await bootstrap.execute('INSERT INTO schema_migrations (id) VALUES (?)', ['001_initial']);
+    for (const migration of migrations) {
+      const [applied] = await bootstrap.execute('SELECT id FROM schema_migrations WHERE id = ? LIMIT 1', [migration.id]);
+      if (applied[0]) continue;
+      await prepareMigration(bootstrap, migration.id);
+      const sql = await readFile(join(currentDir, '..', 'db', migration.file), 'utf8');
+      await bootstrap.query(sql);
+      await bootstrap.execute('INSERT INTO schema_migrations (id) VALUES (?)', [migration.id]);
     }
   } finally {
     await bootstrap.end();
