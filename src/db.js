@@ -85,6 +85,8 @@ export async function query(sql, params = []) {
 export async function transaction(callback) {
   const connection = await db().getConnection();
   try {
+    // Never let an operational request hang indefinitely behind a stale row lock.
+    await connection.query('SET SESSION innodb_lock_wait_timeout = 8');
     await connection.beginTransaction();
     const result = await callback(connection);
     await connection.commit();
