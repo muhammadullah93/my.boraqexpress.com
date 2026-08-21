@@ -1,0 +1,20 @@
+CREATE TABLE IF NOT EXISTS packproof_uploads (
+  id CHAR(36) PRIMARY KEY,
+  packing_session_id CHAR(36) NOT NULL,
+  created_by CHAR(36) NULL,
+  provider VARCHAR(30) NOT NULL DEFAULT 'google_drive',
+  provider_session_url TEXT NOT NULL,
+  file_name VARCHAR(255) NOT NULL,
+  mime_type VARCHAR(120) NOT NULL,
+  total_size BIGINT UNSIGNED NOT NULL,
+  uploaded_size BIGINT UNSIGNED NOT NULL DEFAULT 0,
+  status VARCHAR(30) NOT NULL DEFAULT 'uploading',
+  drive_file_id VARCHAR(190) NULL,
+  expires_at DATETIME NOT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  CONSTRAINT fk_packproof_upload_session FOREIGN KEY (packing_session_id) REFERENCES packing_sessions(id) ON DELETE CASCADE,
+  CONSTRAINT fk_packproof_upload_user FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL,
+  INDEX idx_packproof_upload_session (packing_session_id, status),
+  INDEX idx_packproof_upload_expiry (status, expires_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

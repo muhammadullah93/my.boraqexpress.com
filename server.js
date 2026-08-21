@@ -5,6 +5,7 @@ import { config, validateRuntimeConfig } from './src/config.js';
 import { closeDb, initDb } from './src/db.js';
 import { cookies, errorHandler, notFound, requestContext, securityHeaders } from './src/middleware.js';
 import { apiRouter } from './src/routes/api.js';
+import { schedulePackProofCleanup } from './src/services/packproof-retention.js';
 
 const currentDir = dirname(fileURLToPath(import.meta.url));
 const publicDir = join(currentDir, 'public');
@@ -13,6 +14,7 @@ let server;
 async function start() {
   validateRuntimeConfig();
   await initDb();
+  schedulePackProofCleanup();
 
   const app = express();
   app.set('trust proxy', config.trustProxy);

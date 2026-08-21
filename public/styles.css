@@ -233,6 +233,14 @@ tbody tr:hover td { background: #fcfefd; }
 .meta-box small { margin-bottom: 3px; color: var(--muted); font-size: 9px; text-transform: uppercase; letter-spacing: .06em; }
 .proof-callout { padding: 12px; border: 1px solid #dfe8e4; border-radius: 10px; background: #fcfefd; color: var(--muted); font-size: 11px; }
 .proof-callout b { color: var(--ink); }
+.proof-upload { display: grid; gap: 8px; margin-top: 14px; padding: 13px; border: 1px solid #dfe8e4; border-radius: 10px; background: #f8fbfa; }
+.proof-upload .field { margin: 0; }
+.proof-ready { margin-top: 14px; padding: 12px; border: 1px solid #bfe4d3; border-radius: 10px; background: var(--green-soft); color: var(--green-dark); }
+.proof-ready b, .proof-ready small { display: block; }
+.proof-ready small { margin-top: 3px; color: var(--muted); }
+.upload-progress { height: 7px; overflow: hidden; border-radius: 99px; background: #dfe8e4; }
+.upload-progress span { display: block; width: 0; height: 100%; background: var(--green); transition: width .2s ease; }
+.upload-status { min-height: 16px; color: var(--muted); }
 
 .integration-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 13px; }
 .integration-card { padding: 18px; }

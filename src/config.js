@@ -29,6 +29,17 @@ export const config = {
     email: (env.ADMIN_EMAIL || '').trim().toLowerCase(),
     password: env.ADMIN_PASSWORD || ''
   },
+  packProof: {
+    retentionDays: Math.min(365, Math.max(1, integer(env.PACKPROOF_RETENTION_DAYS, 30))),
+    maxFileBytes: Math.min(5 * 1024 ** 3, Math.max(1024 ** 2, integer(env.PACKPROOF_MAX_FILE_BYTES, 250 * 1024 ** 2))),
+    chunkBytes: 8 * 1024 ** 2,
+    drive: {
+      clientId: env.GOOGLE_DRIVE_CLIENT_ID || '',
+      clientSecret: env.GOOGLE_DRIVE_CLIENT_SECRET || '',
+      refreshToken: env.GOOGLE_DRIVE_REFRESH_TOKEN || '',
+      folderId: env.GOOGLE_DRIVE_FOLDER_ID || ''
+    }
+  },
   integrations: {
     shopee: {
       partnerId: env.SHOPEE_PARTNER_ID || '',
@@ -64,6 +75,14 @@ export function validateRuntimeConfig() {
   if (config.admin.password && config.admin.password.length < 12) {
     throw new Error('ADMIN_PASSWORD must contain at least 12 characters.');
   }
+  const driveValues = Object.values(config.packProof.drive);
+  if (driveValues.some(Boolean) && !driveValues.every(Boolean)) {
+    throw new Error('Google Drive PackProof storage is partially configured. Set all GOOGLE_DRIVE_* variables or none of them.');
+  }
+}
+
+export function driveStorageConfigured() {
+  return Object.values(config.packProof.drive).every(Boolean);
 }
 
 export function integrationConfigured(platform) {

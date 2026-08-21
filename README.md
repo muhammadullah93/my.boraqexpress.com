@@ -18,7 +18,7 @@ barcode packing and PackProof records.
   status transitions
 - Inventory adjustments and an immutable movement ledger
 - Barcode/order/AWB packing sessions
-- PackProof metadata, optional HTTPS evidence URL and 30-day retention date
+- PackProof video upload to a private Google Drive folder, authenticated playback and automatic retention cleanup
 - PackProof completion enforced before an order enters `to_ship`
 - Manual courier booking, tracking and HTTPS label records
 - Role-scoped return requests, Admin review and auditable inventory restocking
@@ -88,7 +88,7 @@ require the CSRF header issued at login.
 | Catalogue | `/api/products` |
 | Inventory | `/api/inventory`, `/api/inventory/adjustments` |
 | Orders | `/api/orders`, `/api/orders/:id/status` |
-| PackProof | `/api/packing`, `/api/packing/scan`, `/api/packing/:id/complete` |
+| PackProof | `/api/packing`, `/api/packing/scan`, `/api/packing/:id/evidence/uploads`, `/api/packing/evidence/uploads/:uploadId`, `/api/packing/:id/evidence`, `/api/packing/:id/complete` |
 | Shipping | `/api/shipments` |
 | Returns | `/api/returns`, `/api/returns/:id` |
 | Finance | `/api/finance`, `/api/finance/adjustments`, `/api/finance/payouts` |
@@ -102,7 +102,8 @@ require the CSRF header issued at login.
 .
 ├── db/
 │   ├── schema.sql
-│   └── 002_operations.sql
+│   ├── 002_operations.sql
+│   └── 003_packproof_drive.sql
 ├── .github/workflows/ci.yml
 ├── public/
 │   ├── app.js
@@ -121,9 +122,11 @@ require the CSRF header issued at login.
 
 ## Deliberate first-release limits
 
-- PackProof stores the record and optional evidence URL, not uploaded video
-  binary. Durable object storage and signed upload URLs belong in the next
-  production phase.
+- PackProof uses Google Drive as the initial durable video store. Uploads are
+  chunked, files remain private, playback is proxied through authenticated
+  SellFlow access, and the server deletes expired evidence. Google Drive is an
+  MVP storage choice rather than a CDN; the storage adapter can be replaced by
+  object storage when throughput grows.
 - One order may contain products from only one supplier. A multi-supplier basket
   must be split into separate fulfillment orders.
 - Marketplace connectors remain inactive until official API approval.

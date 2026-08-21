@@ -9,14 +9,45 @@ import { hashPassword } from './auth.js';
 let pool;
 
 async function prepareMigration(connection, id) {
-  if (id !== '002_operations') return;
-  const [columns] = await connection.execute(
-    `SELECT COLUMN_NAME FROM information_schema.COLUMNS
-      WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'order_items' AND COLUMN_NAME = 'supplier_unit_price'`,
-    [config.db.name]
-  );
-  if (!columns[0]) {
-    await connection.execute('ALTER TABLE order_items ADD COLUMN supplier_unit_price DECIMAL(12,2) NULL AFTER unit_price');
+  if (id === '002_operations') {
+    const [columns] = await connection.execute(
+      `SELECT COLUMN_NAME FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'order_items' AND COLUMN_NAME = 'supplier_unit_price'`,
+      [config.db.name]
+    );
+    if (!columns[0]) {
+      await connection.execute('ALTER TABLE order_items ADD COLUMN supplier_unit_price DECIMAL(12,2) NULL AFTER unit_price');
+    }
+  }
+  if (id === '003_packproof_drive') {
+    const definitions = [
+      ['evidence_provider', 'VARCHAR(30) NULL AFTER evidence_url'],
+      ['evidence_file_id', 'VARCHAR(190) NULL AFTER evidence_provider'],
+      ['evidence_name', 'VARCHAR(255) NULL AFTER evidence_file_id'],
+      ['evidence_mime_type', 'VARCHAR(120) NULL AFTER evidence_name'],
+      ['evidence_size', 'BIGINT UNSIGNED NULL AFTER evidence_mime_type']
+    ];
+    const [columns] = await connection.execute(
+      `SELECT COLUMN_NAME FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'packing_sessions'`,
+      [config.db.name]
+    );
+    const existingColumns = new Set(columns.map(row => row.COLUMN_NAME));
+    for (const [name, definition] of definitions) {
+      if (!existingColumns.has(name)) await connection.query(`ALTER TABLE packing_sessions ADD COLUMN \`${name}\` ${definition}`);
+    }
+    const [indexes] = await connection.execute(
+      `SELECT DISTINCT INDEX_NAME FROM information_schema.STATISTICS
+        WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'packing_sessions'`,
+      [config.db.name]
+    );
+    const existingIndexes = new Set(indexes.map(row => row.INDEX_NAME));
+    if (!existingIndexes.has('idx_packproof_retention')) {
+      await connection.query('ALTER TABLE packing_sessions ADD INDEX idx_packproof_retention (retention_until, evidence_status)');
+    }
+    if (!existingIndexes.has('uq_packproof_drive_file')) {
+      await connection.query('ALTER TABLE packing_sessions ADD UNIQUE KEY uq_packproof_drive_file (evidence_file_id)');
+    }
   }
 }
 
@@ -38,7 +69,8 @@ export async function initDb() {
   const currentDir = dirname(fileURLToPath(import.meta.url));
   const migrations = [
     { id: '001_initial', file: 'schema.sql' },
-    { id: '002_operations', file: '002_operations.sql' }
+    { id: '002_operations', file: '002_operations.sql' },
+    { id: '003_packproof_drive', file: '003_packproof_drive.sql' }
   ];
   const bootstrap = await mysql.createConnection(connectionOptions({ multipleStatements: true }));
   try {

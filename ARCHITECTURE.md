@@ -50,9 +50,13 @@ Shop and Lazada. A sync request returns a clear `INTEGRATION_NOT_CONFIGURED`
 response until official API credentials are present in the environment. The
 application never pretends demo data is a live marketplace sync.
 
-## PackProof boundary
+## PackProof storage boundary
 
-The MVP stores barcode scans, packing sessions, timestamps, operator identity,
-evidence status, evidence URL and a 30-day retention date. Video binary storage
-must use durable object storage in the production phase; it is not stored in
-the Git repository or MySQL.
+The application stores barcode scans, packing sessions, timestamps, operator
+identity and evidence metadata in MySQL. Video bytes are uploaded in resumable
+chunks to a private Google Drive date hierarchy (`YYYY/MM/DD`). The Drive file
+ID is never exposed as a public share link: authorized users stream evidence
+through the role-scoped API. A six-hour retention worker deletes Drive files
+after the configured period (30 days by default) while preserving the text
+audit record. Google Drive is behind a service module so higher-volume object
+storage can replace it without changing the packing workflow.

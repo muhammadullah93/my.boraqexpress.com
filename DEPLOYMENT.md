@@ -81,11 +81,30 @@ LAZADA_APP_KEY=
 LAZADA_APP_SECRET=
 ```
 
+For direct PackProof video upload, enable the Google Drive API for a dedicated
+OAuth client, create a private base folder and add all four values below. The
+refresh token must have permission to create, read and delete files inside that
+Drive. Do not create a public share link and never put these values in GitHub.
+
+```text
+GOOGLE_DRIVE_CLIENT_ID=<OAuth client ID>
+GOOGLE_DRIVE_CLIENT_SECRET=<OAuth client secret>
+GOOGLE_DRIVE_REFRESH_TOKEN=<offline refresh token>
+GOOGLE_DRIVE_FOLDER_ID=<private PackProof base folder ID>
+PACKPROOF_RETENTION_DAYS=30
+PACKPROOF_MAX_FILE_BYTES=262144000
+```
+
+The app refuses a partial Drive configuration. When none of these four Drive
+credentials is supplied, the rest of SellFlow remains available and PackProof
+shows that direct upload is awaiting authorization.
+
 ## 5. First boot
 
 At startup the app runs ordered, idempotent migrations and records each one in
-`schema_migrations`: `001_initial` creates the original operational tables and
-`002_operations` adds price snapshots, shipping, returns, wallets and payouts.
+`schema_migrations`: `001_initial` creates the original operational tables,
+`002_operations` adds price snapshots, shipping, returns, wallets and payouts,
+and `003_packproof_drive` adds private-video metadata and resumable upload state.
 If the `users` table is empty, the initial admin variables are required and
 create the first Admin account. The server intentionally refuses to start with
 an empty user table and no bootstrap administrator.
@@ -110,8 +129,9 @@ Do not switch the production domain until all checks pass:
 - Creating an order reserves stock.
 - Cancelling releases reserved stock; shipping records a negative inventory
   movement.
-- Barcode/order scan starts packing; completion changes the order to `to_ship`
-  and sets a 30-day retention date.
+- Barcode/order scan starts packing; a video uploads privately to Google Drive
+  in chunks; authenticated playback works; completion changes the order to
+  `to_ship` and sets a 30-day retention date.
 - Booking a manual shipment stores courier, tracking and optional HTTPS label
   metadata without pretending that a courier API was called.
 - A Dropshipper return request is role-scoped; Admin can review it and a

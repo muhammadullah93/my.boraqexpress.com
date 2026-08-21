@@ -95,6 +95,16 @@ function formatDate(value, includeTime = true) {
     : { dateStyle: 'medium' }).format(date);
 }
 
+function formatBytes(value) {
+  const bytes = Number(value) || 0;
+  if (bytes < 1024) return `${bytes} B`;
+  const units = ['KB', 'MB', 'GB', 'TB'];
+  let amount = bytes;
+  let unit = -1;
+  do { amount /= 1024; unit += 1; } while (amount >= 1024 && unit < units.length - 1);
+  return `${amount.toFixed(amount >= 10 ? 1 : 2)} ${units[unit]}`;
+}
+
 function statusTone(status) {
   const value = String(status || '').toLowerCase();
   if (['active', 'paid', 'delivered', 'complete', 'completed', 'captured', 'success', 'connected', 'packed'].includes(value)) return 'green';
@@ -151,6 +161,30 @@ async function api(path, { method = 'GET', body } = {}) {
     error.code = data?.error?.code || 'REQUEST_FAILED';
     error.status = response.status;
     if (response.status === 401 && path !== '/auth/login') showLogin();
+    throw error;
+  }
+  return data;
+}
+
+async function uploadChunk(path, chunk, start, total) {
+  const end = start + chunk.size - 1;
+  const response = await fetch(`/api${path}`, {
+    method: 'PUT',
+    headers: {
+      Accept: 'application/json',
+      'Content-Type': 'application/octet-stream',
+      'Content-Range': `bytes ${start}-${end}/${total}`,
+      'X-CSRF-Token': state.csrfToken
+    },
+    credentials: 'same-origin',
+    body: chunk
+  });
+  const data = await response.json().catch(() => null);
+  if (!response.ok) {
+    const error = new Error(data?.error?.message || `Upload failed with status ${response.status}.`);
+    error.code = data?.error?.code || 'UPLOAD_FAILED';
+    error.status = response.status;
+    error.details = data?.error?.details;
     throw error;
   }
   return data;
@@ -454,19 +488,23 @@ function openOrderStatusModal(order) {
 }
 
 async function renderPacking() {
-  const data = await api('/packing');
+  const [data, storage] = await Promise.all([api('/packing'), api('/packing/storage')]);
   state.packingSessions = data.sessions;
   const canPack = ['admin', 'supplier'].includes(state.user.role);
   const active = state.activePacking;
-  const activeHtml = active ? `<div class="pack-detail"><div class="pack-order-head"><div><span class="badge blue">Active session</span><h2>${escapeHtml(active.order.order_no)}</h2></div>${badge(active.status)}</div><div class="pack-meta"><div class="meta-box"><small>Customer</small><b>${escapeHtml(active.order.customer_name)}</b></div><div class="meta-box"><small>Tracking / barcode</small><b>${escapeHtml(active.order.tracking_no || active.barcode)}</b></div><div class="meta-box"><small>Channel</small><b>${escapeHtml(titleCase(active.order.channel))}</b></div><div class="meta-box"><small>Ship to</small><b>${escapeHtml(active.order.shipping_address || 'Not provided')}</b></div></div><div class="proof-callout"><b>PackProof v1 record</b><br>Enter a secure evidence URL if video is stored externally. Without one, SellFlow saves a packing metadata record. Both records receive a 30-day retention date.</div>${canPack && active.status === 'packing' ? '<form id="completePackingForm"><label class="field"><span>Evidence URL (optional)</span><input name="evidenceUrl" type="url" placeholder="https://secure-storage.example/proof"><small>HTTPS only. Video binary upload is not part of this release.</small></label><label class="field"><span>Packing notes</span><textarea name="notes" maxlength="2000" placeholder="Seal condition, item check, exception notes…"></textarea></label><button class="button primary full" type="submit">Complete packing & mark to ship</button></form>' : ''}</div>` : '<div class="pack-empty"><div><b>No active packing session</b><p>Scan an order number or airway bill to begin.</p></div></div>';
+  const uploadForm = storage.enabled && !active?.hasVideo
+    ? `<form id="uploadEvidenceForm" class="proof-upload"><label class="field"><span>PackProof video</span><input name="video" type="file" accept="video/*" capture="environment" required><small>Private Google Drive upload · maximum ${escapeHtml(formatBytes(storage.maxFileBytes))}</small></label><button class="button secondary full" type="submit">Upload video evidence</button><div class="upload-progress hidden" id="uploadProgress"><span id="uploadProgressBar"></span></div><small class="upload-status" id="uploadStatus"></small></form>`
+    : active?.hasVideo ? `<div class="proof-ready"><b>✓ Video secured in Google Drive</b><small>${escapeHtml(active.evidenceName || 'PackProof video')} · ${escapeHtml(formatBytes(active.evidenceSize))}</small></div>` : '';
+  const fallbackUrl = !storage.enabled ? '<label class="field"><span>Evidence URL (optional)</span><input name="evidenceUrl" type="url" placeholder="https://secure-storage.example/proof"><small>Google Drive is not configured yet; HTTPS links remain available as a fallback.</small></label>' : '';
+  const activeHtml = active ? `<div class="pack-detail"><div class="pack-order-head"><div><span class="badge blue">Active session</span><h2>${escapeHtml(active.order.order_no)}</h2></div>${badge(active.status)}</div><div class="pack-meta"><div class="meta-box"><small>Customer</small><b>${escapeHtml(active.order.customer_name)}</b></div><div class="meta-box"><small>Tracking / barcode</small><b>${escapeHtml(active.order.tracking_no || active.barcode)}</b></div><div class="meta-box"><small>Channel</small><b>${escapeHtml(titleCase(active.order.channel))}</b></div><div class="meta-box"><small>Ship to</small><b>${escapeHtml(active.order.shipping_address || 'Not provided')}</b></div></div><div class="proof-callout"><b>Private PackProof evidence</b><br>${storage.enabled ? `Videos are stored privately in Google Drive and automatically removed after ${storage.retentionDays} days.` : 'Google Drive credentials are still required before direct video upload becomes available.'}</div>${canPack && active.status === 'packing' ? `${uploadForm}<form id="completePackingForm">${fallbackUrl}<label class="field"><span>Packing notes</span><textarea name="notes" maxlength="2000" placeholder="Seal condition, item check, exception notes…"></textarea></label><button class="button primary full" type="submit">Complete packing & mark to ship</button></form>` : ''}</div>` : '<div class="pack-empty"><div><b>No active packing session</b><p>Scan an order number or airway bill to begin.</p></div></div>';
   elements.page.innerHTML = `
     ${pageHead(canPack ? 'Packing station' : 'PackProof records', canPack ? 'Scan an order or airway bill and retain accountable packing evidence.' : 'Review packing proof for your own orders.')}
-    <div class="notice-card"><span class="notice-icon">30</span><span><b>30-day evidence retention policy</b><small>This release stores packing metadata and an optional secure evidence URL—not raw video files.</small></span></div>
+    <div class="notice-card"><span class="notice-icon">${storage.retentionDays}</span><span><b>${storage.retentionDays}-day evidence retention policy</b><small>${storage.enabled ? 'Private Google Drive video storage is ready. Evidence is streamed through SellFlow—Drive files are not shared publicly.' : 'Direct upload is ready in the application, but Google Drive authorization is not configured on this server.'}</small></span></div>
     <section class="packing-layout">
       ${canPack ? '<article class="card scan-card"><h2>Scan barcode or AWB</h2><p class="muted">A matching assigned order moves into packing.</p><form class="scan-form" id="scanForm"><input class="scan-input" name="barcode" autocomplete="off" required maxlength="160" placeholder="Scan or enter order number"><button class="button primary" type="submit">Start</button></form></article>' : '<article class="card scan-card"><h2>Read-only proof access</h2><p class="muted">Only admins and assigned suppliers can start or complete a packing session.</p></article>'}
       <article class="card active-pack">${activeHtml}</article>
     </section>
-    <section class="card table-card dashboard-grid-single"><div class="card-head"><div><h2>Recent PackProof records</h2><p>Role-scoped packing history</p></div></div><div class="table-wrap"><table><thead><tr><th>Order</th><th>Barcode</th><th>Status</th><th>Evidence</th><th>Retention until</th><th>Started</th></tr></thead><tbody>${state.packingSessions.length ? state.packingSessions.map(session => `<tr><td><span class="table-primary">${escapeHtml(session.order.order_no)}</span><span class="table-secondary">${escapeHtml(session.order.customer_name)}</span></td><td>${escapeHtml(session.barcode)}</td><td>${badge(session.status)}</td><td>${session.evidenceUrl ? `<a href="${escapeHtml(session.evidenceUrl)}" target="_blank" rel="noopener noreferrer">Open proof</a>` : badge(session.evidenceStatus)}</td><td>${escapeHtml(formatDate(session.retentionUntil, false))}</td><td>${escapeHtml(formatDate(session.startedAt))}</td></tr>`).join('') : emptyRow(6, 'No packing sessions yet.')}</tbody></table></div></section>`;
+    <section class="card table-card dashboard-grid-single"><div class="card-head"><div><h2>Recent PackProof records</h2><p>Role-scoped packing history</p></div></div><div class="table-wrap"><table><thead><tr><th>Order</th><th>Barcode</th><th>Status</th><th>Evidence</th><th>Retention until</th><th>Started</th></tr></thead><tbody>${state.packingSessions.length ? state.packingSessions.map(session => `<tr><td><span class="table-primary">${escapeHtml(session.order.order_no)}</span><span class="table-secondary">${escapeHtml(session.order.customer_name)}</span></td><td>${escapeHtml(session.barcode)}</td><td>${badge(session.status)}</td><td>${session.hasVideo ? `<a href="/api/packing/${encodeURIComponent(session.id)}/evidence" target="_blank" rel="noopener noreferrer">Open video</a><span class="table-secondary">${escapeHtml(formatBytes(session.evidenceSize))}</span>` : session.evidenceUrl ? `<a href="${escapeHtml(session.evidenceUrl)}" target="_blank" rel="noopener noreferrer">Open proof</a>` : badge(session.evidenceStatus)}</td><td>${escapeHtml(formatDate(session.retentionUntil, false))}</td><td>${escapeHtml(formatDate(session.startedAt))}</td></tr>`).join('') : emptyRow(6, 'No packing sessions yet.')}</tbody></table></div></section>`;
 
   $('#scanForm')?.addEventListener('submit', async event => {
     event.preventDefault();
@@ -479,6 +517,42 @@ async function renderPacking() {
       await renderPacking();
       showToast(result.resumed ? 'Packing session resumed.' : 'Packing session started.');
     } catch (error) {
+      showToast(error.message, 'error');
+      button.disabled = false;
+    }
+  });
+  $('#uploadEvidenceForm')?.addEventListener('submit', async event => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const button = form.querySelector('button');
+    const file = new FormData(form).get('video');
+    if (!(file instanceof File) || !file.size) return showToast('Choose a PackProof video first.', 'error');
+    if (file.size > storage.maxFileBytes) return showToast(`Video must be smaller than ${formatBytes(storage.maxFileBytes)}.`, 'error');
+    button.disabled = true;
+    const progress = $('#uploadProgress');
+    const bar = $('#uploadProgressBar');
+    const status = $('#uploadStatus');
+    progress.classList.remove('hidden');
+    try {
+      const started = await api(`/packing/${state.activePacking.id}/evidence/uploads`, {
+        method: 'POST',
+        body: { fileName: file.name || 'packproof-video.webm', mimeType: file.type || 'video/webm', size: file.size }
+      });
+      let offset = started.upload.uploadedSize;
+      const chunkBytes = started.upload.chunkBytes;
+      while (offset < file.size) {
+        const chunk = file.slice(offset, Math.min(offset + chunkBytes, file.size));
+        const result = await uploadChunk(`/packing/evidence/uploads/${started.upload.id}`, chunk, offset, file.size);
+        offset = result.upload.uploadedSize;
+        const percent = Math.min(100, Math.round(offset / file.size * 100));
+        bar.style.width = `${percent}%`;
+        status.textContent = `Uploading ${percent}% · ${formatBytes(offset)} of ${formatBytes(file.size)}`;
+        if (result.session) state.activePacking = result.session;
+      }
+      await renderPacking();
+      showToast('PackProof video secured in Google Drive.');
+    } catch (error) {
+      status.textContent = error.message;
       showToast(error.message, 'error');
       button.disabled = false;
     }
@@ -716,7 +790,7 @@ function renderSettings() {
     <section class="settings-grid">
       <article class="card settings-card"><h2>Your account</h2><p>This profile is loaded from the authenticated server session.</p><div class="rule-list"><div class="rule"><span>●</span><div><b>${escapeHtml(state.user.name)}</b><small>${escapeHtml(state.user.email)}</small></div></div><div class="rule"><span>●</span><div><b>${escapeHtml(titleCase(state.user.role))}</b><small>${escapeHtml(state.user.companyName || 'Boraq Express workspace')}</small></div></div><div class="rule"><span>●</span><div><b>Session security</b><small>HttpOnly signed cookie plus CSRF protection.</small></div></div><button class="button secondary" data-action="change-password">Change my password</button></div></article>
       <article class="card settings-card"><h2>Role boundary</h2><p>Commercial data is filtered again by the server, not only hidden in the interface.</p><div class="rule-list"><div class="rule"><span>✓</span><div><b>${escapeHtml(commercialRule[0])}</b><small>${escapeHtml(commercialRule[1])}</small></div></div><div class="rule"><span>✓</span><div><b>Scoped records</b><small>Suppliers see assigned fulfillment; dropshippers see only their own orders.</small></div></div><div class="rule"><span>✓</span><div><b>Audit trail</b><small>Login and operational changes are recorded in MySQL.</small></div></div></div></article>
-      <article class="card settings-card"><h2>PackProof v1</h2><p>Operational and honest about its current capability.</p><div class="rule-list"><div class="rule"><span>30</span><div><b>30-day retention date</b><small>Stored on every completed packing session.</small></div></div><div class="rule"><span>↗</span><div><b>Secure evidence URL</b><small>Optional pointer to externally stored evidence; no binary video upload yet.</small></div></div></div></article>
+      <article class="card settings-card"><h2>PackProof video</h2><p>Private evidence storage with accountable retention.</p><div class="rule-list"><div class="rule"><span>30</span><div><b>30-day retention</b><small>Expired Google Drive videos are automatically removed while the operational log remains.</small></div></div><div class="rule"><span>▣</span><div><b>Private Google Drive evidence</b><small>Videos are opened through authenticated SellFlow access, not public share links.</small></div></div></div></article>
       <article class="card settings-card"><h2>Marketplace sync</h2><p>Adapter scaffolding is present, but credentials alone are not treated as approval.</p><div class="rule-list"><div class="rule"><span>!</span><div><b>Approval pending</b><small>Shopee, TikTok Shop and Lazada developer access is still required.</small></div></div>${state.user.role === 'admin' ? '<button class="button secondary" data-action="view-integrations">Open integration status</button>' : ''}</div></article>
     </section>`;
 }
