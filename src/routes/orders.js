@@ -158,16 +158,23 @@ ordersRouter.patch('/:id/status', async (req, res) => {
     }
     if (nextStatus === 'shipped') {
       for (const item of items) {
-        const [productRows] = await connection.execute('SELECT stock, reserved FROM products WHERE id = ? FOR UPDATE', [item.product_id]);
-        const product = productRows[0];
-        if (!product || Number(product.stock) < Number(item.quantity)) throw new ApiError(409, 'INSUFFICIENT_STOCK', `${item.sku} cannot be shipped due to insufficient stock.`);
-        const balance = Number(product.stock) - Number(item.quantity);
-        await connection.execute('UPDATE products SET stock = ?, reserved = GREATEST(0, reserved - ?) WHERE id = ?', [balance, item.quantity, item.product_id]);
+        const quantity = Number(item.quantity);
+        const [stockUpdate] = await connection.execute(
+          `UPDATE products
+              SET stock = stock - ?, reserved = GREATEST(0, reserved - ?)
+            WHERE id = ? AND stock >= ?`,
+          [quantity, quantity, item.product_id, quantity]
+        );
+        if (stockUpdate.affectedRows !== 1) {
+          throw new ApiError(409, 'INSUFFICIENT_STOCK', `${item.sku} cannot be shipped due to insufficient stock.`);
+        }
+        const [productRows] = await connection.execute('SELECT stock FROM products WHERE id = ?', [item.product_id]);
+        const balance = Number(productRows[0].stock);
         await connection.execute(
           `INSERT INTO inventory_movements
            (id, product_id, delta, reason, reference_type, reference_id, balance_after, created_by)
            VALUES (?, ?, ?, 'order_shipped', 'order', ?, ?, ?)`,
-          [randomUUID(), item.product_id, -Number(item.quantity), order.id, balance, req.user.id]
+          [randomUUID(), item.product_id, -quantity, order.id, balance, req.user.id]
         );
       }
     }
