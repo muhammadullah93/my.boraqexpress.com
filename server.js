@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { config, validateRuntimeConfig } from './src/config.js';
 import { closeDb, initDb } from './src/db.js';
-import { cookies, errorHandler, notFound, securityHeaders } from './src/middleware.js';
+import { cookies, errorHandler, notFound, requestContext, securityHeaders } from './src/middleware.js';
 import { apiRouter } from './src/routes/api.js';
 
 const currentDir = dirname(fileURLToPath(import.meta.url));
@@ -17,6 +17,7 @@ async function start() {
   const app = express();
   app.set('trust proxy', config.trustProxy);
   app.disable('x-powered-by');
+  app.use(requestContext);
   app.use(securityHeaders);
   app.use(cookies);
   app.use(express.json({ limit: '1mb', strict: true }));
@@ -34,6 +35,9 @@ async function start() {
   server = app.listen(config.port, () => {
     console.log(`SellFlow Commerce OS listening on port ${config.port}`);
   });
+  server.requestTimeout = 60_000;
+  server.headersTimeout = 65_000;
+  server.keepAliveTimeout = 5_000;
 }
 
 async function shutdown(signal) {

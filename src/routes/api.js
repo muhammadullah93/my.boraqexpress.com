@@ -12,10 +12,14 @@ import { reportsRouter } from './reports.js';
 import { returnsRouter } from './returns.js';
 import { shipmentsRouter } from './shipments.js';
 import { requireAuth, requireCsrf } from '../middleware.js';
+import { query } from '../db.js';
 
 export const apiRouter = Router();
 
-apiRouter.get('/health', (_req, res) => res.json({ status: 'ok', service: 'sellflow-commerce-os' }));
+apiRouter.get('/health', async (_req, res) => {
+  await query('SELECT 1');
+  res.json({ status: 'ok', service: 'sellflow-commerce-os', checks: { database: 'ok' } });
+});
 apiRouter.use('/auth', authRouter);
 
 apiRouter.use(requireAuth);

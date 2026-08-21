@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { config } from '../config.js';
 import { createCsrfToken, hashPassword, signSession, verifyPassword } from '../auth.js';
 import { audit, query } from '../db.js';
-import { loginRateLimit, requireAuth, requireCsrf } from '../middleware.js';
+import { clearLoginRateLimit, loginRateLimit, requireAuth, requireCsrf } from '../middleware.js';
 import { ApiError, email, publicUser, text } from '../utils.js';
 
 export const authRouter = Router();
@@ -29,6 +29,7 @@ authRouter.post('/login', loginRateLimit, async (req, res) => {
   const csrf = createCsrfToken();
   res.cookie('sellflow_session', token, cookieOptions(true));
   res.cookie('sellflow_csrf', csrf, cookieOptions(false));
+  clearLoginRateLimit(req);
   await audit(user.id, 'login', 'session', null, { ip: req.ip });
   res.json({ user: publicUser(user), csrfToken: csrf });
 });
