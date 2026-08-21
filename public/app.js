@@ -817,6 +817,9 @@ elements.modalForm.addEventListener('submit', async event => {
     await state.modalHandler(elements.modalForm);
     closeModal();
   } catch (error) {
+    if (Number(error.status) >= 500) {
+      console.error(`SellFlow API error ${error.status} ${error.code || 'INTERNAL_ERROR'}`);
+    }
     elements.modalError.textContent = error.message;
     elements.modalSubmit.disabled = false;
   }
